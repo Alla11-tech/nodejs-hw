@@ -4,14 +4,19 @@ import { Note } from '../models/note.js';
 export const getAllNotes = async (req, res) => {
   const { page = 1, perPage = 10, tag, search } = req.query;
 
-  const filter = {};
-  if (tag) filter.tag = tag;
-  if (search) filter.$text = { $search: search };
-
   const skip = (page - 1) * perPage;
-  const totalNotes = await Note.countDocuments(filter);
+
+  const query = Note.find();
+
+  if (tag) query.where('tag').equals(tag);
+  if (search) query.where({ $text: { $search: search } });
+
+  const [totalNotes, notes] = await Promise.all([
+    Note.countDocuments(query.getFilter()),
+    query.skip(skip).limit(Number(perPage)),
+  ]);
+
   const totalPages = Math.ceil(totalNotes / perPage);
-  const notes = await Note.find(filter).skip(skip).limit(Number(perPage));
 
   res.status(200).json({
     page: Number(page),
@@ -43,7 +48,9 @@ export const deleteNote = async (req, res) => {
 
 export const updateNote = async (req, res) => {
   const { noteId } = req.params;
-  const note = await Note.findByIdAndUpdate(noteId, req.body, { new: true });
+  const note = await Note.findByIdAndUpdate(noteId, req.body, {
+    returnDocument: 'after',
+  });
   if (!note) throw createHttpError(404, 'Note not found');
   res.status(200).json(note);
 };
